@@ -1,7 +1,7 @@
 "use client";
 
 import { KetahananRow, UploadRow } from "@/lib/types";
-import { PRODUCTS, UPLOAD_TYPE_LABEL } from "@/lib/constants";
+import { PRODUCTS } from "@/lib/constants";
 
 function fmt(n: number | null) {
   if (n === null || n === undefined) return "-";
@@ -13,7 +13,7 @@ export default function KetahananCards({ upload, rows, products }: { upload: Upl
   return (
     <div>
       <div className="text-sm font-medium mb-2 bg-teal-700/30 border border-teal-700 rounded px-3 py-2">
-        Ketahanan Stock Pertamina Retail per {upload.report_date} {UPLOAD_TYPE_LABEL[upload.upload_type]}
+        Ketahanan Stock Pertamina Retail per {upload.report_date} Pukul {upload.report_time?.slice(0, 5)} WIB
       </div>
       <p className="text-xs text-slate-400 mb-2">Konsol adalah volume gabungan dari seluruh jenis BBM.</p>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

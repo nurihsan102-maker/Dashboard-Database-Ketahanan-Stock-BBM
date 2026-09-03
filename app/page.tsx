@@ -106,7 +106,7 @@ export default function Home() {
         )}
 
         {!primary && (
-          <p className="text-sm text-slate-400">Pilih salah satu data di panel kiri untuk mulai melihat dashboard. Pilih dua data pada tanggal sama dengan tipe berbeda untuk melihat perbandingan 1200 vs 1800.</p>
+          <p className="text-sm text-slate-400">Pilih salah satu data di panel kiri untuk mulai melihat dashboard. Pilih dua data tanggal atau jam apapun untuk melihat perbandingan gap.</p>
         )}
 
         {primary && !secondary && (
@@ -119,6 +119,7 @@ export default function Home() {
                   <div className="text-sm font-semibold mb-1">{product}</div>
                   {ownershipFilter.includes("COCO") && <StatusStockTable rows={primary.status} product={product} ownership="COCO" />}
                   {ownershipFilter.includes("KSO") && <StatusStockTable rows={primary.status} product={product} ownership="KSO" />}
+                  {ownershipFilter.includes("TAC") && <StatusStockTable rows={primary.status} product={product} ownership="TAC" />}
                   <TindakLanjutList rows={primary.status} product={product} />
                 </div>
               ))}

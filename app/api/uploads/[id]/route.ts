@@ -8,7 +8,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const updatable: Record<string, any> = {};
   if (body.report_date) updatable.report_date = body.report_date;
-  if (body.upload_type) updatable.upload_type = body.upload_type;
+  if (body.report_time) updatable.report_time = body.report_time;
+  if (body.data_category) updatable.data_category = body.data_category;
+  if (body.ownership_scope !== undefined) updatable.ownership_scope = body.ownership_scope;
   if (body.notes !== undefined) updatable.notes = body.notes;
   updatable.updated_at = new Date().toISOString();
 

@@ -19,15 +19,14 @@ export const REGIONS = [
   "Region VII",
 ] as const;
 
-export const OWNERSHIPS = ["COCO", "KSO"] as const;
+export const OWNERSHIPS = ["COCO", "KSO", "TAC"] as const;
 
 export const STATUS_LIST = ["DEADSTOCK", "CRITICAL", "NORMAL"] as const;
 
-export const JAM_LIST = ["09:00", "12:00"] as const;
-
-export const UPLOAD_TYPES = ["1200", "1800"] as const;
-
-export const UPLOAD_TYPE_LABEL: Record<string, string> = {
-  "1200": "Pukul 12:00 WIB",
-  "1800": "Pukul 18:00 WIB",
-};
+export const DATA_CATEGORIES = [
+  "Ketahanan Stock",
+  "Status Stock Region",
+  "Coverage Day",
+  "Checklist TAC",
+  "Lainnya",
+] as const;

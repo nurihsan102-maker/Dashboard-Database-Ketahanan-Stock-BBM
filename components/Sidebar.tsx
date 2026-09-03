@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { UploadRow } from "@/lib/types";
-import { UPLOAD_TYPE_LABEL } from "@/lib/constants";
+import { DATA_CATEGORIES, OWNERSHIPS } from "@/lib/constants";
 import { Upload, Trash2, Pencil, Check, X, FileSpreadsheet } from "lucide-react";
 
 export default function Sidebar({
@@ -20,12 +20,15 @@ export default function Sidebar({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [reportDate, setReportDate] = useState("");
-  const [uploadType, setUploadType] = useState<"1200" | "1800">("1200");
+  const [reportTime, setReportTime] = useState("");
+  const [dataCategory, setDataCategory] = useState<string>(DATA_CATEGORIES[0]);
+  const [ownershipScope, setOwnershipScope] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDate, setEditDate] = useState("");
-  const [editType, setEditType] = useState<"1200" | "1800">("1200");
+  const [editTime, setEditTime] = useState("");
+  const [editCategory, setEditCategory] = useState<string>(DATA_CATEGORIES[0]);
 
   async function handleUpload() {
     const file = fileRef.current?.files?.[0];
@@ -33,8 +36,8 @@ export default function Sidebar({
       setMessage("Pilih file excel dulu");
       return;
     }
-    if (!reportDate) {
-      setMessage("Isi tanggal laporan dulu");
+    if (!reportDate || !reportTime) {
+      setMessage("Isi tanggal dan jam laporan dulu");
       return;
     }
     setBusy(true);
@@ -43,13 +46,15 @@ export default function Sidebar({
       const fd = new FormData();
       fd.append("file", file);
       fd.append("report_date", reportDate);
-      fd.append("upload_type", uploadType);
+      fd.append("report_time", reportTime);
+      fd.append("data_category", dataCategory);
+      fd.append("ownership_scope", ownershipScope);
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal upload");
       const counts = json.counts;
       setMessage(
-        `Berhasil. Ketahanan ${counts.ketahanan} baris, Status ${counts.status} baris, Coverage ${counts.coverage} baris.` +
+        `Berhasil. Ketahanan ${counts.ketahanan}, Status ${counts.status}, Coverage ${counts.coverage}, TAC ${counts.tac} baris.` +
           (json.warnings?.length ? ` Catatan: ${json.warnings.join(" | ")}` : "")
       );
       if (fileRef.current) fileRef.current.value = "";
@@ -70,14 +75,15 @@ export default function Sidebar({
   function startEdit(u: UploadRow) {
     setEditingId(u.id);
     setEditDate(u.report_date);
-    setEditType(u.upload_type);
+    setEditTime(u.report_time?.slice(0, 5) || "");
+    setEditCategory(u.data_category);
   }
 
   async function saveEdit(id: string) {
     const res = await fetch(`/api/uploads/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ report_date: editDate, upload_type: editType }),
+      body: JSON.stringify({ report_date: editDate, report_time: editTime, data_category: editCategory }),
     });
     if (res.ok) {
       setEditingId(null);
@@ -96,21 +102,40 @@ export default function Sidebar({
         <div className="flex items-center gap-2 text-sm font-medium">
           <Upload size={16} /> Upload Laporan Baru
         </div>
-        <label className="text-xs text-slate-400">Tanggal Laporan</label>
+        <label className="text-xs text-slate-400">Tanggal</label>
         <input
           type="date"
           value={reportDate}
           onChange={(e) => setReportDate(e.target.value)}
           className="bg-slate-800 rounded px-2 py-1 text-sm outline-none"
         />
-        <label className="text-xs text-slate-400">Tipe Laporan</label>
+        <label className="text-xs text-slate-400">Jam</label>
+        <input
+          type="time"
+          value={reportTime}
+          onChange={(e) => setReportTime(e.target.value)}
+          className="bg-slate-800 rounded px-2 py-1 text-sm outline-none"
+        />
+        <label className="text-xs text-slate-400">Kategori Data</label>
         <select
-          value={uploadType}
-          onChange={(e) => setUploadType(e.target.value as "1200" | "1800")}
+          value={dataCategory}
+          onChange={(e) => setDataCategory(e.target.value)}
           className="bg-slate-800 rounded px-2 py-1 text-sm outline-none"
         >
-          <option value="1200">Pukul 12:00 WIB</option>
-          <option value="1800">Pukul 18:00 WIB</option>
+          {DATA_CATEGORIES.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        <label className="text-xs text-slate-400">Ownership</label>
+        <select
+          value={ownershipScope}
+          onChange={(e) => setOwnershipScope(e.target.value)}
+          className="bg-slate-800 rounded px-2 py-1 text-sm outline-none"
+        >
+          <option value="">Campuran COCO dan KSO</option>
+          {OWNERSHIPS.map((o) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
         </select>
         <label className="text-xs text-slate-400">File Excel</label>
         <input ref={fileRef} type="file" accept=".xlsx,.xls" className="text-xs" />
@@ -144,13 +169,20 @@ export default function Sidebar({
                     onChange={(e) => setEditDate(e.target.value)}
                     className="bg-slate-800 rounded px-1 py-1"
                   />
+                  <input
+                    type="time"
+                    value={editTime}
+                    onChange={(e) => setEditTime(e.target.value)}
+                    className="bg-slate-800 rounded px-1 py-1"
+                  />
                   <select
-                    value={editType}
-                    onChange={(e) => setEditType(e.target.value as "1200" | "1800")}
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value)}
                     className="bg-slate-800 rounded px-1 py-1"
                   >
-                    <option value="1200">1200</option>
-                    <option value="1800">1800</option>
+                    {DATA_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
                   </select>
                   <div className="flex gap-2 mt-1">
                     <button onClick={() => saveEdit(u.id)} className="flex items-center gap-1 text-teal-400">
@@ -164,8 +196,8 @@ export default function Sidebar({
               ) : (
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="font-medium">{u.report_date}</div>
-                    <div className="text-slate-400">{UPLOAD_TYPE_LABEL[u.upload_type]}</div>
+                    <div className="font-medium">{u.report_date} {u.report_time?.slice(0, 5)}</div>
+                    <div className="text-slate-400">{u.data_category}{u.ownership_scope ? ` - ${u.ownership_scope}` : ""}</div>
                     <div className="text-slate-500 truncate max-w-[160px]">{u.original_filename}</div>
                   </div>
                   <div className="flex flex-col gap-1 shrink-0">
@@ -185,7 +217,7 @@ export default function Sidebar({
           )}
         </div>
       </div>
-      <p className="text-[10px] text-slate-500">Klik satu data untuk lihat Terpisah. Klik dua data pada tanggal sama tipe beda untuk bandingkan 1200 vs 1800.</p>
+      <p className="text-[10px] text-slate-500">Klik satu data untuk lihat Terpisah. Klik dua data untuk bandingkan gap antar tanggal atau jam manapun.</p>
     </aside>
   );
 }

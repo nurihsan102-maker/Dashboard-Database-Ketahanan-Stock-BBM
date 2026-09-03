@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { PRODUCTS, REGIONS, OWNERSHIPS, STATUS_LIST, JAM_LIST } from "./constants";
+import { PRODUCTS, REGIONS, STATUS_LIST } from "./constants";
 
 export type KetahananRow = {
   product: string;
@@ -12,7 +12,7 @@ export type StatusRow = {
   product: string;
   ownership: "COCO" | "KSO";
   region: string;
-  jam: "09:00" | "12:00";
+  jam: string;
   status: "DEADSTOCK" | "CRITICAL" | "NORMAL";
   jumlah_unit: number;
 };
@@ -24,10 +24,20 @@ export type CoverageRow = {
   coverage_day: number | null;
 };
 
+export type TacChecklistRow = {
+  spbu_id: string | null;
+  spbu_name: string | null;
+  region: string | null;
+  item_no: number;
+  item_label: string | null;
+  status: boolean | null;
+};
+
 export type ParsedResult = {
   ketahanan: KetahananRow[];
   status: StatusRow[];
   coverage: CoverageRow[];
+  tac: TacChecklistRow[];
   warnings: string[];
 };
 
@@ -156,12 +166,13 @@ function parseStatusSheet(grid: any[][], productHint: string, warnings: string[]
     });
 
     const jamRow = grid[headerRow + 1] || [];
-    // For each region column, jam 09:00 is at 'col', 12:00 typically col+1 (merged header spans two cols)
+    // For each region column, detect any HH:MM style jam label, bebas bukan preset
+    const jamPattern = /^\d{1,2}:\d{2}$/;
     const regionJamCols: { region: string; jam: string; col: number }[] = [];
     for (const rc of regionCols) {
       for (let offset = 0; offset <= 2; offset++) {
         const cell = norm(jamRow[rc.col + offset]);
-        if (cell === "09:00" || cell === "12:00") {
+        if (jamPattern.test(cell)) {
           regionJamCols.push({ region: rc.region, jam: cell, col: rc.col + offset });
         }
       }
@@ -180,7 +191,7 @@ function parseStatusSheet(grid: any[][], productHint: string, warnings: string[]
           product: productHint,
           ownership,
           region: rjc.region,
-          jam: rjc.jam as "09:00" | "12:00",
+          jam: rjc.jam,
           status: status as any,
           jumlah_unit: n,
         });
@@ -242,13 +253,76 @@ function parseCoverageSheet(grid: any[][], warnings: string[]): CoverageRow[] {
   return rows;
 }
 
-export function parseWorkbookBuffer(buffer: ArrayBuffer): ParsedResult {
+// Parses TAC 44 item binary checklist sheet, satu baris per SPBU per item
+function parseTacSheet(grid: any[][], warnings: string[]): TacChecklistRow[] {
+  const rows: TacChecklistRow[] = [];
+
+  let headerRow = -1;
+  let colSpbuId = -1;
+  let colSpbuName = -1;
+  let colRegion = -1;
+  const itemCols: { col: number; label: string; itemNo: number }[] = [];
+
+  for (let r = 0; r < Math.min(grid.length, 10); r++) {
+    const rowStr = (grid[r] || []).map(norm).join("|");
+    if (rowStr.includes("SPBU") || rowStr.includes("ITEM") || rowStr.includes("CHECKLIST")) {
+      headerRow = r;
+      break;
+    }
+  }
+  if (headerRow === -1) {
+    warnings.push("Header checklist TAC tidak ditemukan, pastikan ada kolom SPBU dan daftar item");
+    return rows;
+  }
+
+  let itemCounter = 0;
+  (grid[headerRow] || []).forEach((cell, idx) => {
+    const c = norm(cell);
+    if (c.includes("SPBU") && c.includes("ID") && colSpbuId === -1) colSpbuId = idx;
+    else if (c.includes("SPBU") && colSpbuName === -1) colSpbuName = idx;
+    else if (c.includes("REGION") && colRegion === -1) colRegion = idx;
+    else if (c && idx > 0) {
+      itemCounter += 1;
+      itemCols.push({ col: idx, label: String(cell), itemNo: itemCounter });
+    }
+  });
+
+  for (let r = headerRow + 1; r < grid.length; r++) {
+    const row = grid[r] || [];
+    if (!row.length || row.every((x) => x === null || x === "")) continue;
+    const spbuId = colSpbuId >= 0 ? String(row[colSpbuId] ?? "") : null;
+    const spbuName = colSpbuName >= 0 ? String(row[colSpbuName] ?? "") : null;
+    const region = colRegion >= 0 ? String(row[colRegion] ?? "") : null;
+    for (const ic of itemCols) {
+      const raw = row[ic.col];
+      if (raw === null || raw === undefined || raw === "") continue;
+      const s = norm(raw);
+      const statusBool = s === "1" || s === "YA" || s === "Y" || s === "OK" || s === "TRUE" || s === "SESUAI";
+      rows.push({
+        spbu_id: spbuId,
+        spbu_name: spbuName,
+        region,
+        item_no: ic.itemNo,
+        item_label: ic.label,
+        status: statusBool,
+      });
+    }
+  }
+
+  if (rows.length === 0) warnings.push("Sheet checklist TAC tidak menghasilkan data, cek format kolom");
+  return rows;
+}
+
+export function parseWorkbookBuffer(buffer: ArrayBuffer, ownershipHint?: string): ParsedResult {
   const wb = XLSX.read(buffer, { type: "array" });
   const warnings: string[] = [];
 
   let ketahanan: KetahananRow[] = [];
   let status: StatusRow[] = [];
   let coverage: CoverageRow[] = [];
+  let tac: TacChecklistRow[] = [];
+
+  const isTacUpload = ownershipHint === "TAC";
 
   for (const sheetName of wb.SheetNames) {
     const sheet = wb.Sheets[sheetName];
@@ -260,7 +334,9 @@ export function parseWorkbookBuffer(buffer: ArrayBuffer): ParsedResult {
     const isStatusSheet =
       flatText.includes("DEADSTOCK") && flatText.includes("CRITICAL") && flatText.includes("NORMAL");
 
-    if (isKetahananSheet) {
+    if (isTacUpload && !isKetahananSheet && !isCoverageSheet && !isStatusSheet) {
+      tac = tac.concat(parseTacSheet(grid, warnings));
+    } else if (isKetahananSheet) {
       ketahanan = ketahanan.concat(parseKetahananSheet(grid, warnings));
     } else if (isCoverageSheet) {
       coverage = coverage.concat(parseCoverageSheet(grid, warnings));
@@ -270,9 +346,10 @@ export function parseWorkbookBuffer(buffer: ArrayBuffer): ParsedResult {
     }
   }
 
-  if (ketahanan.length === 0) warnings.push("Data ketahanan stock (kartu ringkasan) tidak ditemukan di file ini");
-  if (status.length === 0) warnings.push("Data status stock dead/critical/normal tidak ditemukan di file ini");
-  if (coverage.length === 0) warnings.push("Data coverage per region tidak ditemukan di file ini");
+  if (!isTacUpload && ketahanan.length === 0) warnings.push("Data ketahanan stock (kartu ringkasan) tidak ditemukan di file ini");
+  if (!isTacUpload && status.length === 0) warnings.push("Data status stock dead/critical/normal tidak ditemukan di file ini");
+  if (!isTacUpload && coverage.length === 0) warnings.push("Data coverage per region tidak ditemukan di file ini");
+  if (isTacUpload && tac.length === 0) warnings.push("Data checklist TAC tidak ditemukan di file ini");
 
-  return { ketahanan, status, coverage, warnings };
+  return { ketahanan, status, coverage, tac, warnings };
 }
